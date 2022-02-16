@@ -1,23 +1,24 @@
-"""
-TODO: You can either work from this skeleton, or you can build on your solution for Toy Robot 3 exercise.
-"""
+import sys
+from world import obstacles
+
+
+turtle_flag = False
+if "turtle" in sys.argv:
+    from world.turtle.world import *
+    turtle_flag = True
+    import world.turtle.world as turtle_wld
+    turtle_wld.setup_turtle()
+else:
+    from world.text.world import *
+
 
 # list of valid command names
-valid_commands = ['off', 'help', 'replay', 'forward', 'back', 'right', 'left', 'sprint']
-move_commands = valid_commands[3:]
+valid_commands = ['off', 'help', 'forward', 'back', 'right', 'left', 'sprint', 'replay', 'silent', 'reversed']
 
 # variables tracking position and direction
 position_x = 0
 position_y = 0
-directions = ['forward', 'right', 'back', 'left']
 current_direction_index = 0
-
-# area limit vars
-min_y, max_y = -200, 200
-min_x, max_x = -100, 100
-
-#commands history
-history = []
 
 
 def get_robot_name():
@@ -66,28 +67,49 @@ def is_int(value):
         return False
 
 
+def check_valid_range(command_range):
+    """
+        checks if the command  range id valid
+        :param command_range: replay range as string
+        :return flag: boolean flag true if range is valid
+    """
+    flag = False
+    if command_range.find("-"):
+        ranges = command_range.split("-")
+    if len(ranges) == 2:
+        if ranges[0].isdigit() and ranges[1].isdigit():
+            flag = True
+    if command_range.isdigit():
+        flag = True
+    return flag
+
+
+def checker_(value):
+    """
+        function used with map() to check if each command valid
+    """
+    if value in valid_commands:
+        return value
+    if check_valid_range(value):
+        return value
+    return ""
+
+
 def valid_command(command):
     """
     Returns a boolean indicating if the robot can understand the command or not
     Also checks if there is an argument to the command, and if it a valid int
     """
+    check_commands = command.lower().split(" ")
+
+    if check_commands[0] == "replay":
+        my_valid_command = list(filter(lambda x: x != "", list(map(checker_ ,check_commands))))
+        if check_commands == my_valid_command:
+            return True
 
     (command_name, arg1) = split_command_input(command)
 
-    if command_name.lower() == 'replay':
-        if len(arg1.strip()) == 0:
-            return True
-        elif (arg1.lower().find('silent') > -1 or arg1.lower().find('reversed') > -1) and len(arg1.lower().replace('silent', '').replace('reversed','').strip()) == 0:
-            return True
-        else:
-            range_args = arg1.replace('silent', '').replace('reversed','')
-            if is_int(range_args):
-                return True
-            else:
-                range_args = range_args.split('-')
-                return is_int(range_args[0]) and is_int(range_args[1]) and len(range_args) == 2
-    else:
-        return command_name.lower() in valid_commands and (len(arg1) == 0 or is_int(arg1))
+    return command_name.lower() in valid_commands and (len(arg1) == 0 or is_int(arg1))
 
 
 def output(name, message):
@@ -107,50 +129,10 @@ BACK - move backward by specified number of steps, e.g. 'BACK 10'
 RIGHT - turn right by 90 degrees
 LEFT - turn left by 90 degrees
 SPRINT - sprint forward according to a formula
-REPLAY - replays all movement commands from history [FORWARD, BACK, RIGHT, LEFT, SPRINT]
+REPLAY {n-m}- replay history commands n is start index m is end index 
+SILENT - DOES COMMANDS SILENTLY
+REVERSED - DOES COMMANDS IN REVERSE
 """
-
-
-def show_position(robot_name):
-    print(' > '+robot_name+' now at position ('+str(position_x)+','+str(position_y)+').')
-
-
-def is_position_allowed(new_x, new_y):
-    """
-    Checks if the new position will still fall within the max area limit
-    :param new_x: the new/proposed x position
-    :param new_y: the new/proposed y position
-    :return: True if allowed, i.e. it falls in the allowed area, else False
-    """
-
-    return min_x <= new_x <= max_x and min_y <= new_y <= max_y
-
-
-def update_position(steps):
-    """
-    Update the current x and y positions given the current direction, and specific nr of steps
-    :param steps:
-    :return: True if the position was updated, else False
-    """
-
-    global position_x, position_y
-    new_x = position_x
-    new_y = position_y
-
-    if directions[current_direction_index] == 'forward':
-        new_y = new_y + steps
-    elif directions[current_direction_index] == 'right':
-        new_x = new_x + steps
-    elif directions[current_direction_index] == 'back':
-        new_y = new_y - steps
-    elif directions[current_direction_index] == 'left':
-        new_x = new_x - steps
-
-    if is_position_allowed(new_x, new_y):
-        position_x = new_x
-        position_y = new_y
-        return True
-    return False
 
 
 def do_forward(robot_name, steps):
@@ -160,27 +142,40 @@ def do_forward(robot_name, steps):
     :param steps:
     :return: (True, forward output text)
     """
-    if update_position(steps):
+    global position_x, position_y, current_direction_index
+
+    zone_flag, obst_flag, new_x, new_y = update_position(steps, position_x, position_y, current_direction_index)
+    if zone_flag and not obst_flag:
+        position_x = new_x
+        position_y = new_y
         return True, ' > '+robot_name+' moved forward by '+str(steps)+' steps.'
-    else:
+    if obst_flag:
+        return True, ''+robot_name+': Sorry, there is an obstacle in the way.'
+    if not zone_flag:
         return True, ''+robot_name+': Sorry, I cannot go outside my safe zone.'
 
 
-def do_back(robot_name, steps):
+def do_backward(robot_name, steps):
     """
     Moves the robot forward the number of steps
     :param robot_name:
     :param steps:
     :return: (True, forward output text)
     """
+    global position_x, position_y, current_direction_index
 
-    if update_position(-steps):
+    zone_flag, obst_flag, new_x, new_y = update_position(-steps, position_x, position_y, current_direction_index)
+    if zone_flag and not obst_flag:
+        position_x = new_x
+        position_y = new_y
         return True, ' > '+robot_name+' moved back by '+str(steps)+' steps.'
-    else:
+    if obst_flag:
+        return True, ''+robot_name+': Sorry, there is an obstacle in the way.'
+    if not zone_flag:
         return True, ''+robot_name+': Sorry, I cannot go outside my safe zone.'
 
 
-def do_right_turn(robot_name):
+def do_right(robot_name):
     """
     Do a 90 degree turn to the right
     :param robot_name:
@@ -192,10 +187,13 @@ def do_right_turn(robot_name):
     if current_direction_index > 3:
         current_direction_index = 0
 
+    if turtle_flag:
+        turtle_turn_right()
+
     return True, ' > '+robot_name+' turned right.'
 
 
-def do_left_turn(robot_name):
+def do_left(robot_name):
     """
     Do a 90 degree turn to the left
     :param robot_name:
@@ -206,6 +204,9 @@ def do_left_turn(robot_name):
     current_direction_index -= 1
     if current_direction_index < 0:
         current_direction_index = 3
+
+    if turtle_flag:
+        turtle_turn_left()
 
     return True, ' > '+robot_name+' turned left.'
 
@@ -226,122 +227,174 @@ def do_sprint(robot_name, steps):
         return do_sprint(robot_name, steps - 1)
 
 
-def get_commands_history(reverse, relativeStart, relativeEnd):
+def reversed_replay(command_history, reverse):
     """
-    Retrieve the commands from history list, already breaking them up into (command_name, arguments) tuples
-    :param reverse: if True, then reverse the list
-    :param relativeStart: the start index relative to the end position of command, e.g. -5 means from index len(commands)-5; None means from beginning
-    :param relativeEnd: the start index relative to the end position of command, e.g. -1 means from index len(commands)-1; None means to the end
-    :return: return list of (command_name, arguments) tuples
+        function that reverses command_history if reverse is set to true
+        :param command_history: list of history commands
+        :param reverse: boolean true/flase true if reverse needed
+        :return command_history: list of history commands
+        :return reverse_pre: prefix to add to output command
     """
-
-    commands_to_replay = [(name, args) for (name, args) in list(map(lambda command: split_command_input(command), history)) if name in move_commands]
+    reverse_pre = ""
     if reverse:
-        commands_to_replay.reverse()
+        command_history = list(filter(lambda x: x != "",command_history[::-1]))
+        reverse_pre = " in reverse"
+    else:
+        command_history = list(filter(lambda x: x != "",command_history))
+    return command_history, reverse_pre
 
-    range_start = len(commands_to_replay) + relativeStart if (relativeStart is not None and (len(commands_to_replay) + relativeStart) >= 0) else 0
-    range_end = len(commands_to_replay) + relativeEnd if  (relativeEnd is not None and (len(commands_to_replay) + relativeEnd) >= 0 and relativeEnd > relativeStart) else len(commands_to_replay)
-    return commands_to_replay[range_start:range_end]
 
-
-def do_replay(robot_name, arguments):
+def replay_silent(silent):
     """
-    Replays historic commands
-    :param robot_name:
-    :param arguments a string containing arguments for the replay command
-    :return: True, output string
+        functions that handels silent command
+        :param silent: boolean true if silent
+        :return silent_pre: prefix to add to output command
     """
-
-    silent = arguments.lower().find('silent') > -1
-    reverse = arguments.lower().find('reversed') > -1
-    range_args = arguments.lower().replace('silent', '').replace('reversed', '')
-
-    range_start = None
-    range_end = None
-
-    if len(range_args.strip()) > 0:
-        if is_int(range_args):
-            range_start = -int(range_args)
-        else:
-            range_args = range_args.split('-')
-            range_start = -int(range_args[0])
-            range_end = -int(range_args[1])
-
-    commands_to_replay = get_commands_history(reverse, range_start, range_end)
-
-    for (command_name, command_arg) in commands_to_replay:
-        (do_next, command_output) = call_command(command_name, command_arg, robot_name)
-        if not silent:
-            print(command_output)
-            show_position(robot_name)
-
-    return True, ' > '+robot_name+' replayed ' + str(len(commands_to_replay)) + ' commands' + (' in reverse' if reverse else '') + (' silently.' if silent else '.')
+    silent_pre = ""
+    if silent:
+        silent_pre = " silently"
+    return silent_pre
 
 
-def call_command(command_name, command_arg, robot_name):
-    if command_name == 'help':
-        return do_help()
-    elif command_name == 'forward':
-        return do_forward(robot_name, int(command_arg))
-    elif command_name == 'back':
-        return do_back(robot_name, int(command_arg))
-    elif command_name == 'right':
-        return do_right_turn(robot_name)
-    elif command_name == 'left':
-        return do_left_turn(robot_name)
-    elif command_name == 'sprint':
-        return do_sprint(robot_name, int(command_arg))
-    elif command_name == 'replay':
-        return do_replay(robot_name, command_arg)
-    return False, None
+def valid_replay_command(command):
+    """
+        checks input commands with listed commands and returns commands
+    """
+    movement_commands = ['forward', 'back', 'right', 'left', 'sprint']
+    for each in movement_commands:
+        if each in command:
+            return command
 
 
-def handle_command(robot_name, command):
+def split_command_range(each):
+    """
+    splits replay range if "-" found
+    """
+    n = each
+    m = "0"
+    if each.find("-") > -1:
+        slit_range = each.split("-")
+        n = slit_range[0]
+        m = slit_range[1]
+    return int(n), int(m)
+
+
+def check_replay_range(command):
+    """
+        function check replay range
+        :param command: commands
+        :return flag: boolean true if range valid
+        :return n, m: int range
+    """
+    split_command = command.split(" ")
+    n = 0
+    m = 0
+    flag = False
+    for each in split_command:
+        if any(map(str.isdigit, each)):
+            flag = True
+            n, m = split_command_range(each)
+    return flag, n, m
+    
+
+def do_replay(robot_name, command_history, command, reverse, silent):
+    """
+        replay command history.
+        :param command_history: history commands
+        :param command: last inputed command
+        :param reverse: boolean true if output must be in reverse
+        :param silent: boolean true if output must be silent
+    """
+    replay_range, n, m = check_replay_range(command)
+
+    movement_commands = ['forward', 'back', 'right', 'left', 'sprint']
+    command_history = list(map(valid_replay_command, command_history))
+    command_history =list(filter(lambda x: x != None, command_history))
+
+    command_history, reverse_pre = reversed_replay(command_history, reverse)
+    silent_pre = replay_silent(silent)
+
+    if replay_range:
+        index = len(command_history) - n
+        command_history = command_history[index:]
+
+    x = 0
+    for command in command_history:
+        handle_command(robot_name, command, command_history, silent)
+        if x == m and m > 0:
+            break
+        x += 1
+    
+    return True, " > {} replayed {} commands{}{}.".format(robot_name, len(command_history) - m, reverse_pre, silent_pre), False
+
+
+def handle_command(robot_name, command, command_history, silent):
     """
     Handles a command by asking different functions to handle each command.
     :param robot_name: the name given to robot
     :param command: the command entered by user
     :return: `True` if the robot must continue after the command, or else `False` if robot must shutdown
     """
+    global position_x, position_y
+    reverse = False
+    if command.find("replay") != -1:
+        if command.find("silent") != -1:
+            silent = True
+        if command.find("reversed") != -1:
+            reverse = True
+        (do_next, command_output, silent) = do_replay(robot_name, command_history, command, reverse, silent)
 
     (command_name, arg) = split_command_input(command)
 
     if command_name == 'off':
         return False
-    else:
-        (do_next, command_output) = call_command(command_name, arg, robot_name)
-
-    print(command_output)
-    show_position(robot_name)
-    add_to_history(command)
+    elif command_name == 'help':
+        (do_next, command_output) = do_help()
+    elif command_name == 'forward':
+        (do_next, command_output) = do_forward(robot_name, int(arg))
+    elif command_name == 'back':
+        (do_next, command_output) = do_backward(robot_name, int(arg))
+    elif command_name == 'right':
+        (do_next, command_output) = do_right(robot_name)
+    elif command_name == 'left':
+        (do_next, command_output) = do_left(robot_name)
+    elif command_name == 'sprint':
+        (do_next, command_output) = do_sprint(robot_name, int(arg))
+    
+    if not silent:
+        print(command_output)
+        show_position(robot_name, position_x, position_y)
 
     return do_next
 
 
-def add_to_history(command):
-    """
-    Adds the command to the history list of commands
-    :param command:
-    :return:
-    """
-    history.append(command)
+def add_command_history(command, command_history):
+    command_history.append(command)
+    return command_history
 
 
 def robot_start():
     """This is the entry point for starting my robot"""
-
-    global position_x, position_y, current_direction_index, history
-
-    robot_name = get_robot_name()
-    output(robot_name, "Hello kiddo!")
-
+    """ s = turtle.getscreen()
+    s = turtle.Turtle()
+    s.exitonclick() """
+    global position_x, position_y, current_direction_index
     position_x = 0
     position_y = 0
     current_direction_index = 0
-    history = []
+    list_of_obstacles = obstacles.get_obstacles()
 
+
+    robot_name = get_robot_name()
+    output(robot_name, "Hello kiddo!")
+    
+    print_obstacles(list_of_obstacles)
+
+    command_history = []
     command = get_command(robot_name)
-    while handle_command(robot_name, command):
+    silent = False
+    while handle_command(robot_name, command, command_history, silent):
+        command_history = add_command_history(command, command_history)
         command = get_command(robot_name)
 
     output(robot_name, "Shutting down..")
